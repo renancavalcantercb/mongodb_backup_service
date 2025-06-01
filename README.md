@@ -217,25 +217,3 @@ To run tests:
 ```bash
 python test_backup.py
 ```
-
-## Dependencies
-
-- **Flask**: Web framework for creating endpoints
-- **pymongo**: Official MongoDB driver for Python
-- **python-dotenv**: Environment variable loading
-- **requests**: HTTP library for testing
-
-## Architecture
-
-The service uses a class-based approach with the `MongoBackupService` class that encapsulates all backup functionality:
-
-- **Separation of concerns**: Each method has a single responsibility
-- **Type hints**: Full type annotation for better code quality
-- **Error handling**: Comprehensive exception handling
-- **Logging**: Detailed logging throughout the process
-- **Resource cleanup**: Automatic cleanup of temporary files
-- **Modern Python**: Uses pathlib, f-strings, and other modern features
-
-## License
-
-This project is under the MIT License.
