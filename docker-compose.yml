@@ -1,0 +1,32 @@
+services:
+  mongodb-backup:
+    build: .
+    container_name: mongodb-backup-service
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGODB_URI=${MONGODB_URI}
+      - MONGODB_DATABASE=${MONGODB_DATABASE:-default_db}
+      - FLASK_PORT=5000
+      - FLASK_ENV=production
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-30}
+    volumes:
+      - backup_data:/app/backups:rw
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - backup_network
+
+volumes:
+  backup_data:
+    driver: local
+
+networks:
+  backup_network:
+    driver: bridge 
