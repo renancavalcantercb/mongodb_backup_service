@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class MongoBackupService:
-    """Professional MongoDB backup service with ZIP archive generation."""
+    """MongoDB backup service with ZIP archive generation."""
 
     def __init__(self):
         self.mongo_uri = Config.MONGODB_URI
