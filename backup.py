@@ -1,193 +1,141 @@
 import os
 import json
-import zipfile
 from datetime import datetime
-from pathlib import Path
-from typing import Dict, List, Optional
 from pymongo import MongoClient
 from bson import json_util
 import logging
 
-from config import Config
-
-Config.validate()
-
-logging.basicConfig(level=Config.get_log_level(), format=Config.LOG_FORMAT)
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class MongoBackupService:
-    """MongoDB backup service with ZIP archive generation."""
+def get_mongo_client():
+    """
+    Cria e retorna uma conexão com o MongoDB Atlas
+    """
+    mongo_uri = os.getenv("MONGODB_URI")
+    if not mongo_uri:
+        raise ValueError("MONGODB_URI não encontrada nas variáveis de ambiente")
 
-    def __init__(self):
-        self.mongo_uri = Config.MONGODB_URI
-        self.database_name = Config.MONGODB_DATABASE
-        self.backup_base_dir = Config.BACKUP_BASE_DIR
+    try:
+        client = MongoClient(mongo_uri)
+        # Testa a conexão
+        client.admin.command("ping")
+        logger.info("Conexão com MongoDB Atlas estabelecida com sucesso")
+        return client
+    except Exception as e:
+        logger.error(f"Erro ao conectar com MongoDB Atlas: {e}")
+        raise
 
-        if not self.mongo_uri:
-            raise ValueError("MONGODB_URI environment variable is required")
 
-    def get_mongo_client(self) -> MongoClient:
-        """Establish connection to MongoDB Atlas."""
-        try:
-            client = MongoClient(self.mongo_uri)
-            client.admin.command("ping")
-            logger.info("Successfully connected to MongoDB Atlas")
-            return client
-        except Exception as e:
-            logger.error(f"Failed to connect to MongoDB Atlas: {e}")
-            raise
+def create_backup_directory():
+    """
+    Cria o diretório de backup se não existir
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_dir = f"backups/backup_{timestamp}"
 
-    def create_backup_directory(self) -> tuple[Path, str]:
-        """Create timestamped backup directory."""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_dir = self.backup_base_dir / f"backup_{timestamp}"
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Created backup directory: {backup_dir}")
-        return backup_dir, timestamp
+    os.makedirs(backup_dir, exist_ok=True)
+    logger.info(f"Diretório de backup criado: {backup_dir}")
+    return backup_dir
 
-    def backup_collection(
-        self,
-        collection,
-        backup_dir: Path,
-        db_name: str,
-        collection_name: str,
-        timestamp: str,
-    ) -> Optional[Path]:
-        """Backup a single collection to JSON file."""
-        try:
-            documents = list(collection.find())
 
-            if not documents:
-                logger.info(f"Collection {collection_name} is empty")
-                return None
+def backup_collection(collection, backup_dir, db_name, collection_name):
+    """
+    Faz backup de uma coleção específica
+    """
+    try:
+        # Obter todos os documentos da coleção
+        documents = list(collection.find())
 
-            filename = f"{timestamp}_{db_name}_{collection_name}.json"
-            filepath = backup_dir / filename
+        if not documents:
+            logger.info(f"Coleção {collection_name} está vazia")
+            return
 
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(
-                    documents,
-                    f,
-                    default=json_util.default,
-                    indent=2,
-                    ensure_ascii=False,
+        # Nome do arquivo JSON
+        filename = f"{db_name}_{collection_name}.json"
+        filepath = os.path.join(backup_dir, filename)
+
+        # Salvar documentos em JSON
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(
+                documents, f, default=json_util.default, indent=2, ensure_ascii=False
+            )
+
+        logger.info(
+            f"Backup da coleção {collection_name} salvo em {filepath} ({len(documents)} documentos)"
+        )
+
+    except Exception as e:
+        logger.error(f"Erro ao fazer backup da coleção {collection_name}: {e}")
+        raise
+
+
+def run_backup():
+    """
+    Função principal que executa o backup de todas as coleções
+    """
+    try:
+        logger.info("Iniciando processo de backup...")
+
+        # Conectar ao MongoDB
+        client = get_mongo_client()
+
+        # Criar diretório de backup
+        backup_dir = create_backup_directory()
+
+        # Obter nome do banco de dados (pode ser configurado via env var)
+        database_name = os.getenv("MONGODB_DATABASE", "default_db")
+        db = client[database_name]
+
+        # Obter lista de todas as coleções
+        collections = db.list_collection_names()
+
+        if not collections:
+            logger.warning(f"Nenhuma coleção encontrada no banco {database_name}")
+            return
+
+        logger.info(
+            f"Encontradas {len(collections)} coleções para backup: {collections}"
+        )
+
+        # Fazer backup de cada coleção
+        backup_summary = {
+            "timestamp": datetime.now().isoformat(),
+            "database": database_name,
+            "collections_backed_up": [],
+            "backup_directory": backup_dir,
+        }
+
+        for collection_name in collections:
+            try:
+                collection = db[collection_name]
+                backup_collection(
+                    collection, backup_dir, database_name, collection_name
                 )
+                backup_summary["collections_backed_up"].append(collection_name)
+            except Exception as e:
+                logger.error(f"Falha no backup da coleção {collection_name}: {e}")
+                continue
 
-            logger.info(
-                f"Backed up collection {collection_name} to {filepath} "
-                f"({len(documents)} documents)"
-            )
-            return filepath
+        # Salvar resumo do backup
+        summary_file = os.path.join(backup_dir, "backup_summary.json")
+        with open(summary_file, "w", encoding="utf-8") as f:
+            json.dump(backup_summary, f, indent=2, ensure_ascii=False)
 
-        except Exception as e:
-            logger.error(f"Failed to backup collection {collection_name}: {e}")
-            raise
+        logger.info(f"Backup concluído com sucesso! Resumo salvo em {summary_file}")
 
-    def create_zip_archive(self, backup_dir: Path, timestamp: str) -> Path:
-        """Create ZIP archive from backup directory."""
-        zip_filename = f"mongodb_backup_{timestamp}.zip"
-        zip_path = self.backup_base_dir / zip_filename
+        # Fechar conexão
+        client.close()
 
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-            for file_path in backup_dir.rglob("*"):
-                if file_path.is_file():
-                    arcname = file_path.relative_to(backup_dir)
-                    zipf.write(file_path, arcname)
+        return backup_summary
 
-        logger.info(f"Created ZIP archive: {zip_path}")
-        return zip_path
-
-    def cleanup_backup_directory(self, backup_dir: Path) -> None:
-        """Remove temporary backup directory after ZIP creation."""
-        try:
-            import shutil
-
-            shutil.rmtree(backup_dir)
-            logger.info(f"Cleaned up temporary directory: {backup_dir}")
-        except Exception as e:
-            logger.warning(f"Failed to cleanup directory {backup_dir}: {e}")
-
-    def run_backup(self) -> Dict:
-        """Execute complete backup process."""
-        try:
-            logger.info("Starting backup process...")
-
-            client = self.get_mongo_client()
-            backup_dir, timestamp = self.create_backup_directory()
-
-            db = client[self.database_name]
-            collections = db.list_collection_names()
-
-            if not collections:
-                logger.warning(f"No collections found in database {self.database_name}")
-                return {
-                    "status": "warning",
-                    "message": "No collections found",
-                    "timestamp": timestamp,
-                }
-
-            logger.info(f"Found {len(collections)} collections: {collections}")
-
-            backup_summary = {
-                "timestamp": datetime.now().isoformat(),
-                "database": self.database_name,
-                "collections_backed_up": [],
-                "backup_directory": str(backup_dir),
-                "zip_file": None,
-                "total_collections": len(collections),
-                "successful_backups": 0,
-            }
-
-            backed_up_files = []
-
-            for collection_name in collections:
-                try:
-                    collection = db[collection_name]
-                    file_path = self.backup_collection(
-                        collection,
-                        backup_dir,
-                        self.database_name,
-                        collection_name,
-                        timestamp,
-                    )
-                    if file_path:
-                        backup_summary["collections_backed_up"].append(collection_name)
-                        backup_summary["successful_backups"] += 1
-                        backed_up_files.append(file_path)
-                except Exception as e:
-                    logger.error(f"Failed to backup collection {collection_name}: {e}")
-                    continue
-
-            summary_file = backup_dir / f"{timestamp}_backup_summary.json"
-            with open(summary_file, "w", encoding="utf-8") as f:
-                json.dump(backup_summary, f, indent=2, ensure_ascii=False)
-
-            if backed_up_files:
-                zip_path = self.create_zip_archive(backup_dir, timestamp)
-                backup_summary["zip_file"] = str(zip_path)
-                self.cleanup_backup_directory(backup_dir)
-
-            client.close()
-
-            logger.info(
-                f"Backup completed successfully! "
-                f"{backup_summary['successful_backups']}/{backup_summary['total_collections']} "
-                f"collections backed up"
-            )
-
-            return backup_summary
-
-        except Exception as e:
-            logger.error(f"Backup process failed: {e}")
-            raise
-
-
-def run_backup() -> Dict:
-    """Entry point for backup execution."""
-    service = MongoBackupService()
-    return service.run_backup()
+    except Exception as e:
+        logger.error(f"Erro durante o processo de backup: {e}")
+        raise
 
 
 if __name__ == "__main__":
+    # Para teste direto do script
     run_backup()

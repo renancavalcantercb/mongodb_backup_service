@@ -1,59 +1,63 @@
 #!/usr/bin/env python3
+"""
+Script de teste para o serviço de backup do MongoDB
+"""
 
 import requests
 import json
 import time
-from typing import bool
 
-
-def test_health_check() -> bool:
-    print("Testing health check endpoint...")
+def test_health_check():
+    """Testa o endpoint de health check"""
+    print("🔍 Testando health check...")
     try:
         response = requests.get("http://localhost:5000/")
         print(f"Status: {response.status_code}")
-        print(f"Response: {json.dumps(response.json(), indent=2, ensure_ascii=False)}")
+        print(f"Resposta: {json.dumps(response.json(), indent=2, ensure_ascii=False)}")
         return response.status_code == 200
     except Exception as e:
-        print(f"ERROR: Health check failed: {e}")
+        print(f"❌ Erro no health check: {e}")
         return False
 
-
-def test_backup() -> bool:
-    print("\nTesting backup endpoint...")
+def test_backup():
+    """Testa o endpoint de backup"""
+    print("\n📦 Testando backup...")
     try:
         response = requests.post("http://localhost:5000/trigger_backup")
         print(f"Status: {response.status_code}")
-        print(f"Response: {json.dumps(response.json(), indent=2, ensure_ascii=False)}")
+        print(f"Resposta: {json.dumps(response.json(), indent=2, ensure_ascii=False)}")
         return response.status_code == 200
     except Exception as e:
-        print(f"ERROR: Backup test failed: {e}")
+        print(f"❌ Erro no backup: {e}")
         return False
 
-
-def main() -> None:
-    print("MongoDB Backup Service - Test Suite")
+def main():
+    """Função principal de teste"""
+    print("🚀 Iniciando testes do MongoDB Backup Service")
     print("=" * 50)
-
+    
+    # Teste 1: Health Check
     health_ok = test_health_check()
-
+    
     if not health_ok:
-        print("ERROR: Health check failed. Verify if the service is running.")
+        print("❌ Health check falhou. Verifique se o serviço está rodando.")
         return
-
-    print("SUCCESS: Health check passed")
-
+    
+    print("✅ Health check passou!")
+    
+    # Aguarda um pouco antes do próximo teste
     time.sleep(1)
-
+    
+    # Teste 2: Backup
     backup_ok = test_backup()
-
+    
     if backup_ok:
-        print("SUCCESS: Backup test completed successfully")
+        print("✅ Backup executado com sucesso!")
     else:
-        print("ERROR: Backup test failed. Check MongoDB configuration.")
-
+        print("❌ Backup falhou. Verifique as configurações do MongoDB.")
+    
     print("\n" + "=" * 50)
-    print("Test suite completed")
-
+    print("🏁 Testes concluídos!")
 
 if __name__ == "__main__":
-    main()
+    main() 

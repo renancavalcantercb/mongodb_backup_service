@@ -2,24 +2,22 @@ import os
 from flask import Flask, jsonify
 from dotenv import load_dotenv
 from backup import run_backup
-from config import Config
 
 # Carregar variáveis de ambiente
 load_dotenv()
-Config.validate()
 
 app = Flask(__name__)
 
 
 @app.route("/", methods=["GET"])
 def health_check():
-    """Health check endpoint."""
+    """Endpoint de verificação de saúde do serviço"""
     return (
         jsonify(
             {
                 "status": "healthy",
                 "service": "MongoDB Backup Service",
-                "message": "Service is running properly",
+                "message": "Serviço funcionando corretamente",
             }
         ),
         200,
@@ -28,22 +26,27 @@ def health_check():
 
 @app.route("/trigger_backup", methods=["POST"])
 def trigger_backup():
-    """Trigger MongoDB backup process."""
+    """Endpoint para disparar o backup das coleções do MongoDB"""
     try:
         backup_summary = run_backup()
         return (
             jsonify(
                 {
                     "status": "success",
-                    "message": "Backup executed successfully",
+                    "message": "Backup executado com sucesso",
                     "summary": backup_summary,
                 }
             ),
             200,
         )
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Backup failed: {str(e)}"}), 500
+        return (
+            jsonify({"status": "error", "message": f"Erro durante o backup: {str(e)}"}),
+            500,
+        )
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=Config.FLASK_PORT, debug=Config.FLASK_DEBUG)
+    port = int(os.getenv("FLASK_PORT", 5000))
+    debug = os.getenv("FLASK_ENV") == "development"
+    app.run(host="0.0.0.0", port=port, debug=debug)

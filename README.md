@@ -14,6 +14,29 @@ Flask service to backup all collections from a MongoDB Atlas database into JSON 
 - Detailed logging throughout the process
 - Robust error handling
 
+## Project Structure
+
+```
+mongodb-backup-service/
+├── src/                          # Source code
+│   ├── app/                      # Application layer
+│   │   └── main.py              # Flask application and routes
+│   ├── core/                     # Business logic layer
+│   │   ├── backup.py            # Backup service implementation
+│   │   └── config.py            # Configuration management
+│   ├── infrastructure/           # Infrastructure layer (future)
+│   └── tests/                    # Test layer
+│       └── test_backup.py       # Integration tests
+├── scripts/                      # Utility scripts
+│   └── run_tests.py             # Test runner
+├── docs/                         # Documentation
+│   └── ARCHITECTURE.md         # Architecture documentation
+├── app.py                        # Main entry point
+├── Dockerfile                    # Container configuration
+├── docker-compose.yml           # Container orchestration
+└── README.md                    # Project documentation
+```
+
 ## Installation
 
 1. Clone the repository:
@@ -46,13 +69,30 @@ FLASK_ENV=development
 
 ## Usage
 
-### Start the service
+### Local Development
+
+Start the service:
 
 ```bash
-python main.py
+python app.py
 ```
 
 The service will be available at `http://localhost:5000`
+
+### Docker
+
+Build and run with Docker:
+
+```bash
+docker build -t mongodb-backup-service .
+docker run -p 5000:5000 --env-file .env mongodb-backup-service
+```
+
+Or use Docker Compose:
+
+```bash
+docker-compose up --build
+```
 
 ### Available endpoints
 
@@ -115,6 +155,20 @@ curl http://localhost:5000/
 curl -X POST http://localhost:5000/trigger_backup
 ```
 
+## Testing
+
+Run tests using the test runner:
+
+```bash
+python scripts/run_tests.py
+```
+
+Or run tests directly:
+
+```bash
+python src/tests/test_backup.py
+```
+
 ## Backup Structure
 
 Backups are saved with the following structure:
@@ -169,22 +223,9 @@ backups/
 | `FLASK_PORT`       | Flask server port                          | No       | `5000`        |
 | `FLASK_ENV`        | Flask environment (development/production) | No       | `development` |
 
-## Logging
+## Architecture
 
-The service generates detailed logs during the backup process:
-
-```
-2024-01-15 10:30:00,123 - backup - INFO - Starting backup process...
-2024-01-15 10:30:00,456 - backup - INFO - Successfully connected to MongoDB Atlas
-2024-01-15 10:30:00,789 - backup - INFO - Created backup directory: backups/backup_20240115_103000
-2024-01-15 10:30:01,012 - backup - INFO - Found 3 collections: ['collection1', 'collection2', 'collection3']
-2024-01-15 10:30:01,345 - backup - INFO - Backed up collection collection1 to backups/backup_20240115_103000/20240115_103000_database_name_collection1.json (150 documents)
-2024-01-15 10:30:01,678 - backup - INFO - Backed up collection collection2 to backups/backup_20240115_103000/20240115_103000_database_name_collection2.json (75 documents)
-2024-01-15 10:30:01,901 - backup - INFO - Backed up collection collection3 to backups/backup_20240115_103000/20240115_103000_database_name_collection3.json (300 documents)
-2024-01-15 10:30:02,234 - backup - INFO - Created ZIP archive: backups/mongodb_backup_20240115_103000.zip
-2024-01-15 10:30:02,567 - backup - INFO - Cleaned up temporary directory: backups/backup_20240115_103000
-2024-01-15 10:30:02,890 - backup - INFO - Backup completed successfully! 3/3 collections backed up
-```
+This project follows clean architecture principles with clear separation of concerns. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed information.
 
 ## Error Handling
 
@@ -203,17 +244,11 @@ To run in development mode:
 
 ```bash
 export FLASK_ENV=development
-python main.py
+python app.py
 ```
 
 To run backup directly (without Flask):
 
 ```bash
-python backup.py
-```
-
-To run tests:
-
-```bash
-python test_backup.py
+python -c "from src.core.backup import run_backup; run_backup()"
 ```
