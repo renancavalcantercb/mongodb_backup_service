@@ -1,6 +1,8 @@
 services:
   mongodb-backup:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: mongodb-backup-service
     ports:
       - "5000:5000"
